@@ -133,6 +133,9 @@ class KafkaAdminClient(object):
             Default: None
         sasl_kerberos_service_name (str): Service name to include in GSSAPI
             sasl mechanism handshake. Default: 'kafka'
+        sasl_oauth_token_provider (Object): OAuthBearer token provider instance
+            that implements method 'token'
+            Default: None
 
     """
     DEFAULT_CONFIG = {
@@ -166,6 +169,7 @@ class KafkaAdminClient(object):
         'sasl_plain_username': None,
         'sasl_plain_password': None,
         'sasl_kerberos_service_name': 'kafka',
+        'sasl_oauth_token_provider': None,
 
         # metrics configs
         'metric_reporters': [],
