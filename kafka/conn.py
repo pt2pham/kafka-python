@@ -262,7 +262,6 @@ class BrokerConnection(object):
                 assert self.config['sasl_kerberos_service_name'] is not None, 'sasl_kerberos_service_name required for GSSAPI sasl'
             if self.config['sasl_mechanism'] == 'OAUTHBEARER':
                 token_provider = self.config['sasl_oauth_token_provider']
-                print(self.config)
                 assert token_provider is not None, 'sasl_oauth_token_provider required for OAUTHBEARER sasl'
                 assert callable(getattr(token_provider, "token", None)), 'sasl_oauth_token_provider must implement method #token()'
         # This is not a general lock / this class is not generally thread-safe yet
@@ -669,14 +668,12 @@ class BrokerConnection(object):
         return future.success(True)
 
     def _try_authenticate_oauth(self, future):
-        token_provider = self.config['sasl_oauth_token_provider']
-
         data = b''
         # Send PLAIN credentials per RFC-4616
-        msg = "n,,\x01auth=Bearer %s%s\x01\x01".format(token_provider.token())
-
+        msg = bytes(self._build_oauth_client_request().encode("utf-8"))
         size = Int32.encode(len(msg))
         try:
+            # Send SASL OAuthBearer request with OAuth token
             self._send_bytes_blocking(size + msg)
 
             # The server will send a zero sized message (that is Int32(0)) on success.
@@ -695,6 +692,25 @@ class BrokerConnection(object):
 
         log.info('%s: Authenticated via OAuth', self)
         return future.success(True)
+
+    def _build_oauth_client_request(self):
+        token_provider = self.config['sasl_oauth_token_provider']
+        return "n,,\x01auth=Bearer {}{}\x01\x01".format(token_provider.token(), self._token_extensions())
+
+    def _token_extensions(self):
+        """
+        Return a string representation of the OPTIONAL key-value pairs that can be sent with an OAUTHBEARER
+        initial request.
+        """
+        token_provider = self.config['sasl_oauth_token_provider']
+
+        # Only run if the #extensions() method is implemented by the clients Token Provider class
+        # Builds up a string separated by \x01 via a dict of key value pairs
+        if callable(getattr(token_provider, "extensions", None)):
+            msg = "\x01".join(["{}={}".format(k, v) for k, v in token_provider.extensions().items()])
+            return "\x01" + msg
+        else:
+            return ""
 
     def blacked_out(self):
         """
